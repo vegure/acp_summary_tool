@@ -11,7 +11,6 @@ from fastmcp import Client
 import tqdm
 import pillow_heif
 
-from silicon_flow_client import get_silicon_flow_response
 
 pillow_heif.register_heif_opener()
 
