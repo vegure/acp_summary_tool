@@ -13,6 +13,7 @@ import time
 from PIL import Image, ImageTk
 import shutil
 import json
+import datetime  # 添加导入以支持自动模式根据时间切换
 # 导入LLM客户端注册中心
 from llm_client import LLMClientRegistry
 
@@ -29,58 +30,120 @@ class ACPReportGenerator:
         # 跟踪临时目录
         self.temp_dirs = []
         
+        # 加载配置
+        self.load_config()
+        
         # 添加窗口关闭事件处理
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # 设置中文字体
+        # 设置中文字体和现代扁平化样式
         self.style = ttk.Style()
-        self.style.configure("TLabel", font=("SimHei", 10))
-        self.style.configure("TButton", font=("SimHei", 10))
-        self.style.configure("Header.TLabel", font=("SimHei", 14, "bold"))
         
+        # 配置现代扁平化主题
+        self.style.theme_use('clam')
+        
+        # 定义主题颜色方案
+        self.themes = {
+            'light': {
+                'primary_color': '#FF6B9B',  # 糖果粉
+                'secondary_color': '#7ED6DF',  # 糖果蓝
+                'accent_color': '#F9D423',  # 糖果黄
+                'background_color': '#F5F5F5',  # 浅灰背景（带透明度效果）
+                'card_color': '#FFFFFF',  # 卡片白色
+                'text_color': '#333333',  # 深灰文字
+                'text_light': '#666666',  # 浅灰文字
+                'border_color': '#E0E0E0'  # 边框颜色
+            },
+            'dark': {
+                'primary_color': '#FF6B9B',  # 糖果粉
+                'secondary_color': '#7ED6DF',  # 糖果蓝
+                'accent_color': '#F9D423',  # 糖果黄
+                'background_color': '#2D2D2D',  # 深灰背景
+                'card_color': '#3A3A3A',  # 卡片深灰
+                'text_color': '#F5F5F5',  # 浅灰文字
+                'text_light': '#CCCCCC',  # 更浅灰文字
+                'border_color': '#4A4A4A'  # 边框颜色
+            }
+        }
+        
+        # 获取当前主题（从配置或自动检测）
+        self.theme_mode = self.config.get('theme_mode', 'auto')
+        self.current_theme = self.get_theme()
+        
+        # 应用主题
+        self.apply_theme()
+
         # 创建主框架
-        self.main_frame = ttk.Frame(root, padding="20")
+        self.main_frame = ttk.Frame(self.root, padding="20")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         # 创建左侧控制面板
-        self.control_frame = ttk.LabelFrame(self.main_frame, text="控制面板", padding="10")
-        self.control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        self.control_frame = ttk.LabelFrame(self.main_frame, text="控制面板", padding="15")
+        self.control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 15), pady=(0, 5))
+        self.control_frame.configure(width=250)
         
         # 选择文件夹按钮
         self.select_folder_btn = ttk.Button(
             self.control_frame, 
             text="选择图片文件夹", 
-            command=self.select_folder
+            command=self.select_folder,
+            style="Primary.TButton"
         )
-        self.select_folder_btn.pack(fill=tk.X, pady=(0, 10))
+        self.select_folder_btn.pack(fill=tk.X, pady=(0, 12))
         
         # 选择单个图片按钮
         self.select_file_btn = ttk.Button(
             self.control_frame, 
             text="选择单个图片", 
-            command=self.select_file
+            command=self.select_file,
+            style="Primary.TButton"
         )
-        self.select_file_btn.pack(fill=tk.X, pady=(0, 10))
+        self.select_file_btn.pack(fill=tk.X, pady=(0, 12))
         
         # 处理按钮
         self.process_btn = ttk.Button(
             self.control_frame, 
             text="生成总结报告", 
             command=self.start_processing,
-            state=tk.DISABLED
+            state=tk.DISABLED,
+            style="Success.TButton"
         )
-        self.process_btn.pack(fill=tk.X, pady=(0, 10))
+        self.process_btn.pack(fill=tk.X, pady=(0, 12))
         
-        # 状态标签
-        self.status_var = tk.StringVar()
-        self.status_var.set("等待选择图片...")
-        self.status_label = ttk.Label(
+        # 添加分隔线
+        ttk.Separator(self.control_frame).pack(fill=tk.X, pady=12)
+        
+        # 保存按钮
+        self.save_btn = ttk.Button(
             self.control_frame, 
-            textvariable=self.status_var, 
-            relief=tk.SUNKEN, 
-            anchor=tk.W
+            text="保存报告", 
+            command=self.save_report,
+            state=tk.DISABLED,
+            style="Primary.TButton"
         )
-        self.status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        self.save_btn.pack(fill=tk.X, pady=(0, 12))
+        
+        # 打开浏览器按钮
+        self.browser_btn = ttk.Button(
+            self.control_frame, 
+            text="在浏览器中查看", 
+            command=self.open_in_browser,
+            state=tk.DISABLED,
+            style="Primary.TButton"
+        )
+        self.browser_btn.pack(fill=tk.X, pady=(0, 12))
+
+        # 配置按钮
+        self.config_btn = ttk.Button(
+            self.control_frame, 
+            text="配置", 
+            command=self.open_config_dialog,
+            style="TButton"
+        )
+        self.config_btn.pack(fill=tk.X, pady=(0, 12))
+        
+        # 添加分隔线
+        ttk.Separator(self.control_frame).pack(fill=tk.X, pady=12)
         
         # 创建进度条
         self.progress_var = tk.DoubleVar()
@@ -89,14 +152,28 @@ class ACPReportGenerator:
             variable=self.progress_var,
             mode="determinate"
         )
-        self.progress_bar.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        self.progress_bar.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 10))
         
-        # 创建右侧报告显示区域
-        self.report_frame = ttk.LabelFrame(self.main_frame, text="总结报告", padding="10")
-        self.report_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        # 状态标签
+        self.status_var = tk.StringVar()
+        self.status_var.set("等待选择图片...")
+        self.status_label = ttk.Label(
+            self.control_frame, 
+            textvariable=self.status_var, 
+            relief=tk.FLAT, 
+            anchor=tk.W,
+            padding=5
+        )
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 5))
+        
+        # 创建右侧reported区域
+        self.report_frame = ttk.LabelFrame(self.main_frame, text="总结报告", padding="15")
+        self.report_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, pady=(0, 5))
         
         # 创建标签页控件
-        self.tab_control = ttk.Notebook(self.report_frame)
+        self.tab_control = ttk.Notebook(self.report_frame, style="TNotebook")
+        self.style.configure("TNotebook", tabposition='n', padding=5)
+        self.style.configure("TNotebook.Tab", font=('SimHei', 10), padding=[15, 5], background=self.card_color)
         
         # 创建原始报告标签页
         self.raw_report_tab = ttk.Frame(self.tab_control)
@@ -112,39 +189,16 @@ class ACPReportGenerator:
         self.report_text = scrolledtext.ScrolledText(
             self.raw_report_tab, 
             wrap=tk.WORD,
-            font=("SimHei", 10)
+            font=('SimHei', 10),
+            bg=self.card_color,
+            borderwidth=1,
+            relief='solid'
         )
-        self.report_text.pack(fill=tk.BOTH, expand=True)
+        self.report_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 在渲染报告标签页中添加占位标签
-        self.html_label = ttk.Label(self.rendered_report_tab, text="报告将在这里渲染")
+        self.html_label = ttk.Label(self.rendered_report_tab, text="报告将在这里渲染", background=self.card_color)
         self.html_label.pack(fill=tk.BOTH, expand=True)
-        
-        # 保存按钮
-        self.save_btn = ttk.Button(
-            self.control_frame, 
-            text="保存报告", 
-            command=self.save_report,
-            state=tk.DISABLED
-        )
-        self.save_btn.pack(fill=tk.X, pady=(0, 10))
-        
-        # 打开浏览器按钮
-        self.browser_btn = ttk.Button(
-            self.control_frame, 
-            text="在浏览器中查看", 
-            command=self.open_in_browser,
-            state=tk.DISABLED
-        )
-        self.browser_btn.pack(fill=tk.X, pady=(0, 10))
-
-        # 配置按钮
-        self.config_btn = ttk.Button(
-            self.control_frame, 
-            text="配置API密钥", 
-            command=self.open_config_dialog
-        )
-        self.config_btn.pack(fill=tk.X, pady=(0, 10))
         
         # 初始化变量
         self.selected_paths = []
@@ -198,7 +252,6 @@ class ACPReportGenerator:
             self.process_btn.config(state=tk.DISABLED)
             self.select_folder_btn.config(state=tk.DISABLED)
             self.select_file_btn.config(state=tk.DISABLED)
-            self.status_var.set("正在准备图片...")
             self.progress_var.set(0)
 
             # 创建临时目录
@@ -366,16 +419,20 @@ class ACPReportGenerator:
         browser_btn = ttk.Button(
             self.rendered_report_tab, 
             text="在浏览器中查看渲染报告", 
-            command=self.open_in_browser
+            command=self.open_in_browser,
+            style="Primary.TButton"
         )
-        browser_btn.pack(pady=10)
+        browser_btn.pack(pady=15)
         
         # 添加HTML内容预览
         html_preview = scrolledtext.ScrolledText(
             self.rendered_report_tab, 
             wrap=tk.WORD, 
-            font=("SimHei", 10),
-            height=20
+            font=('SimHei', 10),
+            height=20,
+            bg=self.card_color,
+            borderwidth=1,
+            relief='solid'
         )
         html_preview.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         html_preview.insert(tk.END, self.html_content)
@@ -385,9 +442,10 @@ class ACPReportGenerator:
         tip_label = ttk.Label(
             self.rendered_report_tab, 
             text="提示: 点击按钮在浏览器中查看完整渲染效果",
-            foreground="blue"
+            foreground=self.primary_color,
+            background=self.card_color
         )
-        tip_label.pack(pady=5)
+        tip_label.pack(pady=10)
         
         # 显示转换成功的消息
         self.status_var.set("Markdown报告已转换为HTML，点击'在浏览器中查看'按钮查看完整渲染效果")
@@ -485,6 +543,96 @@ class ACPReportGenerator:
         # 关闭窗口
         self.root.destroy()
 
+    def get_theme(self):
+        # 根据模式获取当前主题
+        if self.theme_mode == 'auto':
+            # 自动模式: 6:00-18:00 使用亮色主题，其余时间使用暗色主题
+            hour = datetime.datetime.now().hour
+            return 'light' if 6 <= hour < 18 else 'dark'
+        else:
+            # 手动模式: 直接使用设置的主题
+            return self.theme_mode
+
+    def apply_theme(self):
+        # 应用当前主题
+        # 获取当前主题的颜色配置
+        theme_colors = self.themes[self.current_theme]
+        
+        # 存储颜色变量
+        self.primary_color = theme_colors['primary_color']
+        self.secondary_color = theme_colors['secondary_color']
+        self.accent_color = theme_colors['accent_color']
+        self.background_color = theme_colors['background_color']
+        self.card_color = theme_colors['card_color']
+        self.text_color = theme_colors['text_color']
+        self.text_light = theme_colors['text_light']
+        self.border_color = theme_colors['border_color']
+        
+        # 配置样式 - 使用更柔和的字体
+        self.style.configure("TLabel", font=('PingFang SC', 12), foreground=self.text_color, background=self.background_color)
+        self.style.configure("Header.TLabel", font=('PingFang SC', 14, 'bold'), foreground=self.text_color, background=self.background_color)
+        self.style.configure("TButton", font=('PingFang SC', 12), padding=6)
+        self.style.configure("Primary.TButton", foreground='white', background=self.primary_color)
+        self.style.configure("Success.TButton", foreground='white', background=self.secondary_color)
+        self.style.configure("Danger.TButton", foreground='white', background=self.accent_color)
+        self.style.configure("TFrame", background=self.background_color)
+        self.style.configure("TLabelFrame", background=self.background_color, borderwidth=1, relief='solid', padding=10)
+        self.style.configure("TRadiobutton", background=self.background_color, foreground=self.text_color)
+        self.style.configure("TProgressbar", thickness=8)
+        
+        # 重新配置根窗口背景
+        self.root.configure(bg=self.background_color)
+        
+        # 如果主框架已存在，更新其背景色
+        if hasattr(self, 'main_frame'):
+            self.main_frame.configure(style="TFrame")
+            # 更新所有子组件
+            for child in self.root.winfo_children():
+                self.update_widget_style(child)
+
+    def update_widget_style(self, widget):
+        # 递归更新组件样式
+        # 更新当前组件
+        if hasattr(widget, 'configure'):
+            try:
+                # 更新背景色
+                if 'background' in widget.configure():
+                    widget.configure(background=self.background_color)
+                # 更新前景色
+                if 'foreground' in widget.configure():
+                    widget.configure(foreground=self.text_color)
+                # 更新样式
+                if hasattr(widget, 'config') and 'style' in widget.config():
+                    widget_style = widget.cget('style')
+                    if widget_style and not widget_style.startswith('T'):
+                        widget.configure(style=widget_style)
+            except tk.TclError:
+                pass
+        
+        # 递归更新子组件
+        for child in widget.winfo_children():
+            self.update_widget_style(child)
+
+    def toggle_theme(self, mode=None):
+        # 切换主题模式
+        if mode:
+            self.theme_mode = mode
+        else:
+            # 循环切换模式: auto -> light -> dark -> auto
+            modes = ['auto', 'light', 'dark']
+            current_index = modes.index(self.theme_mode)
+            self.theme_mode = modes[(current_index + 1) % len(modes)]
+        
+        # 更新当前主题
+        self.current_theme = self.get_theme()
+        
+        # 保存配置
+        self.config['theme_mode'] = self.theme_mode
+        self.save_config(self.config)
+        
+        # 应用新主题
+        self.apply_theme()
+
 
 class ConfigDialog(tk.Toplevel):
     """API配置对话框"""
@@ -493,51 +641,75 @@ class ConfigDialog(tk.Toplevel):
         self.parent = parent
         self.app = app
         self.title("API配置")
-        self.geometry("400x300")
+        self.geometry("400x400")  # 增加高度以容纳主题设置
         self.resizable(False, False)
         
         # 使对话框模态
         self.grab_set()
         
+        # 设置背景色
+        self.configure(bg=self.app.background_color)
+        
         # 创建主框架
-        main_frame = ttk.Frame(self, padding="20")
+        main_frame = ttk.Frame(self, padding="20", style="TFrame")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # API类型选择
-        ttk.Label(main_frame, text="API类型:", font=("SimHei", 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
+        ttk.Label(main_frame, text="API类型:", font=('PingFang SC', 12)).grid(row=0, column=0, sticky=tk.W, pady=(0, 12))
         self.api_type = tk.StringVar(value="火山引擎")
-        api_type_frame = ttk.Frame(main_frame)
-        api_type_frame.grid(row=0, column=1, sticky=tk.W, pady=(0, 10))
+        api_type_frame = ttk.Frame(main_frame, style="TFrame")
+        api_type_frame.grid(row=0, column=1, sticky=tk.W, pady=(0, 12))
         
         ttk.Radiobutton(
             api_type_frame, 
             text="火山引擎", 
             variable=self.api_type, 
-            value="火山引擎"
-        ).pack(side=tk.LEFT, padx=(0, 10))
+            value="火山引擎",
+            style="TRadiobutton"
+        ).pack(side=tk.LEFT, padx=(0, 15))
         
         ttk.Radiobutton(
             api_type_frame, 
             text="DeepSeek", 
             variable=self.api_type, 
-            value="DeepSeek"
+            value="DeepSeek",
+            style="TRadiobutton"
         ).pack(side=tk.LEFT)
         
         # API密钥输入
-        ttk.Label(main_frame, text="API密钥:", font=("SimHei", 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
+        ttk.Label(main_frame, text="API密钥:", font=('PingFang SC', 12)).grid(row=1, column=0, sticky=tk.W, pady=(0, 12))
         self.api_key_entry = ttk.Entry(main_frame, width=30, show="*")
-        self.api_key_entry.grid(row=1, column=1, sticky=tk.W, pady=(0, 10))
+        self.api_key_entry.grid(row=1, column=1, sticky=tk.W, pady=(0, 12))
         
-        # 加载现有配置
-        self.load_existing_config()
+        # 主题设置
+        ttk.Label(main_frame, text="主题模式:", font=('PingFang SC', 12)).grid(row=2, column=0, sticky=tk.W, pady=(15, 12))
+        self.theme_mode = tk.StringVar(value=self.app.theme_mode)
+        theme_frame = ttk.Frame(main_frame, style="TFrame")
+        theme_frame.grid(row=2, column=1, sticky=tk.W, pady=(15, 12))
         
-        # 校验按钮
-        self.test_btn = ttk.Button(
-            main_frame, 
-            text="校验连接", 
-            command=self.test_connection
-        )
-        self.test_btn.grid(row=2, column=0, columnspan=2, pady=(0, 10))
+        ttk.Radiobutton(
+            theme_frame, 
+            text="自动", 
+            variable=self.theme_mode, 
+            value="auto",
+            style="TRadiobutton"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            theme_frame, 
+            text="白天", 
+            variable=self.theme_mode, 
+            value="light",
+            style="TRadiobutton"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            theme_frame, 
+            text="黑夜", 
+            variable=self.theme_mode, 
+            value="dark",
+            style="TRadiobutton"
+        ).pack(side=tk.LEFT)
         
         # 状态标签
         self.status_var = tk.StringVar()
@@ -545,30 +717,62 @@ class ConfigDialog(tk.Toplevel):
         self.status_label = ttk.Label(
             main_frame, 
             textvariable=self.status_var, 
-            anchor=tk.W
+            anchor=tk.W,
+            padding=5
         )
-        self.status_label.grid(row=3, column=0, columnspan=2, pady=(0, 10))
+        self.status_label.grid(row=4, column=0, columnspan=2, pady=(0, 12))
+        
+        # 校验按钮
+        self.test_btn = ttk.Button(
+            main_frame, 
+            text="校验连接", 
+            command=self.test_connection,
+            style="Primary.TButton"
+        )
+        self.test_btn.grid(row=3, column=0, columnspan=2, pady=(0, 12))
         
         # 按钮框架
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+        btn_frame = ttk.Frame(main_frame, style="TFrame")
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=(15, 0))
         
         # 保存按钮
         self.save_btn = ttk.Button(
             btn_frame, 
             text="保存配置", 
-            command=self.save_dialog_config
+            command=self.save_dialog_config,
+            style="Success.TButton"
         )
-        self.save_btn.pack(side=tk.LEFT, padx=(0, 10))
+        self.save_btn.pack(side=tk.LEFT, padx=(0, 15))
         
         # 取消按钮
         self.cancel_btn = ttk.Button(
             btn_frame, 
             text="取消", 
-            command=self.destroy
+            command=self.destroy,
+            style="TButton"
         )
         self.cancel_btn.pack(side=tk.LEFT)
         
+        # 加载现有配置
+        self.load_existing_config()
+    
+    def test_connection(self):
+        """测试API连接"""
+        api_type = self.api_type.get()
+        api_key = self.api_key_entry.get()
+        
+        if not api_key:
+            self.status_var.set("请输入API密钥")
+            return
+        
+        self.status_var.set("正在测试连接...")
+        success, message = self.app.test_api_connection(api_type, api_key)
+        
+        if success:
+            self.status_var.set(f"连接成功: {message}")
+        else:
+            self.status_var.set(f"连接失败: {message}")
+
     def load_existing_config(self):
         """加载现有配置"""
         api_type = self.app.config.get("api_type", "火山引擎")
@@ -577,38 +781,15 @@ class ConfigDialog(tk.Toplevel):
         api_key = self.app.config.get("api_keys", {}).get(api_type, "")
         self.api_key_entry.insert(0, api_key)
         
-    def test_connection(self):
-        """测试API连接"""
-        api_type = self.api_type.get()
-        api_key = self.api_key_entry.get()
-        
-        if not api_key:
-            messagebox.showerror("错误", "请输入API密钥")
-            return
-        
-        self.status_var.set("正在测试连接...")
-        self.update()
-        
-        # 在新线程中测试连接
-        def test_thread():
-            success, message = self.app.test_api_connection(api_type, api_key)
-            self.app.root.after(0, lambda: self.update_test_result(success, message))
-        
-        threading.Thread(target=test_thread).start()
-        
-    def update_test_result(self, success, message):
-        """更新测试结果"""
-        if success:
-            self.status_var.set(f"连接成功: {message}")
-            messagebox.showinfo("成功", f"API连接测试成功: {message}")
-        else:
-            self.status_var.set(f"连接失败: {message}")
-            messagebox.showerror("错误", f"API连接测试失败: {message}")
-        
+        # 加载主题模式
+        theme_mode = self.app.config.get("theme_mode", "auto")
+        self.theme_mode.set(theme_mode)
+
     def save_dialog_config(self):
         """保存配置"""
         api_type = self.api_type.get()
         api_key = self.api_key_entry.get()
+        theme_mode = self.theme_mode.get()
         
         if not api_key:
             messagebox.showerror("错误", "请输入API密钥")
@@ -622,32 +803,21 @@ class ConfigDialog(tk.Toplevel):
         api_keys[api_type] = api_key
         config["api_keys"] = api_keys
         
+        # 保存主题设置
+        config["theme_mode"] = theme_mode
+        
         # 保存配置
         if self.app.save_config(config):
+            # 更新应用的主题
+            self.app.theme_mode = theme_mode
+            self.app.current_theme = self.app.get_theme()
+            self.app.apply_theme()
+            
             messagebox.showinfo("成功", "配置已保存")
             self.destroy()
         else:
             messagebox.showerror("错误", "保存配置失败")
 
-
-# 在ACPReportGenerator类中添加on_closing方法
-# 找到类的最后一个方法并添加
-
-# 假设test_api_connection是ACPReportGenerator类的最后一个方法
-# 我们将在该方法后添加on_closing方法
-
-# 查找并添加on_closing方法到正确的位置
-# 首先找到test_api_connection方法的结束位置
-
-# 添加on_closing方法
-    def on_closing(self):
-        """窗口关闭事件处理"""
-        # 清理所有临时目录
-        for temp_dir in self.temp_dirs:
-            if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir, ignore_errors=True)
-        # 关闭窗口
-        self.root.destroy()
 
 # 主函数保持不变
 def main():
