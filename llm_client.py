@@ -1,0 +1,127 @@
+import os
+import json
+import logging
+from abc import ABC, abstractmethod
+from openai import OpenAI
+
+# 设置日志记录
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# 加载配置
+def load_config():
+    """加载配置文件"""
+    config_file = "config.json"
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"加载配置失败: {str(e)}")
+            return {}
+    else:
+        return {}
+
+# 客户端注册中心
+class LLMClientRegistry:
+    """LLM客户端注册中心，用于管理和获取不同类型的LLM客户端"""
+    _clients = {}
+
+    @classmethod
+    def register_client(cls, client_type: str, client_class):
+        """注册客户端类"""
+        cls._clients[client_type] = client_class
+
+    @classmethod
+    def get_client(cls, client_type: str, api_key=None):
+        """根据类型获取客户端实例"""
+        if client_type not in cls._clients:
+            raise ValueError(f"不支持的客户端类型: {client_type}")
+        return cls._clients[client_type](api_key)
+
+    @classmethod
+    def get_supported_types(cls):
+        """获取所有支持的客户端类型"""
+        return list(cls._clients.keys())
+
+class LLMClient(ABC):
+    """LLM客户端抽象基类，定义与大语言模型API通信的接口"""
+
+    def __init__(self, models: dict, url: str, api_key: str) -> None:
+        self.models = models
+        self.url: str = url
+        self.client = OpenAI(api_key=api_key, base_url=url)
+
+    def get_response(self, messages: list[dict[str, str]], task='llm') -> str:
+        """发送消息给LLM并获取响应"""
+        response = self.client.chat.completions.create(
+            model=self.models[task],
+            messages=messages,
+            stream=False,
+            timeout=1000,  # 设置超时时间为1000秒
+        )
+        return response.choices[0].message.content
+
+    @abstractmethod
+    def test_connection(self) -> tuple[bool, str]:
+        """测试API连接
+        返回: (是否成功, 消息)
+        """
+        pass
+
+class ArkClient(LLMClient):
+    base_url = 'https://ark.cn-beijing.volces.com/api/v3'
+    models = {
+        'llm': 'doubao-1-5-thinking-pro-250415',
+        'vlm': 'doubao-vision-pro-32k-241028',
+    }
+    """Ark客户端，继承自LLMClient，专门用于处理火山引擎平台的请求"""
+    def __init__(self, api_key=None) -> None:
+        # 如果没有提供api_key，则从配置文件中加载
+        if api_key is None:
+            config = load_config()
+            api_key = config.get('api_keys', {}).get('火山引擎', '')
+        super().__init__(self.models, self.base_url, api_key)
+
+    def test_connection(self) -> tuple[bool, str]:
+        """测试火山引擎API连接"""
+        try:
+            # 发送测试请求
+            response = self.get_response(
+                messages=[{"role": "user", "content": "测试连接"}],
+                task='llm'
+            )
+            return True, "连接成功"
+        except Exception as e:
+            return False, f"连接失败: {str(e)}"
+
+
+class SiliconFlowClient(LLMClient):
+    """SiliconFlow客户端，继承自LLMClient，专门用于处理DeepSeek平台的请求"""
+    base_url = 'https://api.siliconflow.cn/v1'
+    models = {
+        'llm': 'Pro/deepseek-ai/DeepSeek-R1',
+        'vlm': 'Qwen/Qwen2.5-VL-32B-Instruct',
+    }
+    def __init__(self, api_key=None) -> None:
+        # 如果没有提供api_key，则从配置文件中加载
+        if api_key is None:
+            config = load_config()
+            api_key = config.get('api_keys', {}).get('DeepSeek', '')
+        super().__init__(self.models, self.base_url, api_key)
+
+    def test_connection(self) -> tuple[bool, str]:
+        """测试DeepSeek API连接"""
+        try:
+            # 发送测试请求
+            response = self.get_response(
+                messages=[{"role": "user", "content": "测试连接"}],
+                task='llm'
+            )
+            return True, "连接成功"
+        except Exception as e:
+            return False, f"连接失败: {str(e)}"
+
+
+# 注册客户端
+LLMClientRegistry.register_client('ark', ArkClient)
+LLMClientRegistry.register_client('silicon_flow', SiliconFlowClient)
