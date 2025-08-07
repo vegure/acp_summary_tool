@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- 背景圆形 -->
+  <circle cx="100" cy="100" r="90" fill="#FF6B9B"/>
+  <!-- 装饰元素 -->
+  <path d="M100 30 L150 100 L100 170 L50 100 Z" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="100" cy="100" r="50" fill="white"/>
+  <!-- 文档图标 -->
+  <path d="M60 80 L140 80 L140 140 L110 140 L110 170 L90 170 L90 140 L60 140 Z" fill="#FF6B9B"/>
+  <!-- ACP文字 -->
+  <text x="100" y="125" font-family="Arial, sans-serif" font-size="36" font-weight="bold" text-anchor="middle" fill="#333">ACP</text>
+  <!-- 装饰圆点 -->
+  <circle cx="75" cy="65" r="5" fill="#7ED6DF"/>
+  <circle cx="125" cy="65" r="5" fill="#F9D423"/>
+</svg>
