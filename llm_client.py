@@ -51,15 +51,21 @@ class LLMClient(ABC):
         self.url: str = url
         self.client = OpenAI(api_key=api_key, base_url=url)
 
-    def get_response(self, messages: list[dict[str, str]], task='llm') -> str:
+    def get_response(self, messages: list[dict[str, str]], task='llm', max_retry=3) -> str:
         """发送消息给LLM并获取响应"""
-        response = self.client.chat.completions.create(
-            model=self.models[task],
-            messages=messages,
-            stream=False,
-            timeout=1000,  # 设置超时时间为1000秒
-        )
-        return response.choices[0].message.content
+        for _ in range(max_retry):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.models[task],
+                    messages=messages,
+                    stream=False,
+                    timeout=1000,  # 设置超时时间为1000秒
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                logging.error(f"Failed to get response from LLM: {str(e)}")
+                continue
+        raise RuntimeError("Failed to get response from LLM.")
 
     @abstractmethod
     def test_connection(self) -> tuple[bool, str]:

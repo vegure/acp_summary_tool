@@ -91,7 +91,6 @@ def main(service=None, images=None):
                 }
             ]
             response = llm_client.get_response(messages=message, task='vlm')
-            print(response)
             with open(images_desc_file, 'a') as f:
                 f.write(f'第{idx}张图片\n' + response.split('wyaf')[-1] + '\n')
             idx += 1

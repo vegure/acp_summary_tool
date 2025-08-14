@@ -16,6 +16,9 @@ import json
 import datetime  # 添加导入以支持自动模式根据时间切换
 # 导入LLM客户端注册中心
 from llm_client import LLMClientRegistry
+# 导入HTML渲染组件
+from tkhtmlview import HTMLLabel
+
 
 # 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -81,6 +84,8 @@ class ACPReportGenerator:
         self.control_frame = ttk.LabelFrame(self.main_frame, text="控制面板", padding="15")
         self.control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 15), pady=(0, 5))
         self.control_frame.configure(width=250)
+        # 确保宽度固定，不受内容影响
+        self.control_frame.pack_propagate(False)
         
         # 选择文件夹按钮
         self.select_folder_btn = ttk.Button(
@@ -187,13 +192,13 @@ class ACPReportGenerator:
         
         # 在原始报告标签页中添加文本框
         self.report_text = scrolledtext.ScrolledText(
-            self.raw_report_tab, 
-            wrap=tk.WORD,
-            font=('SimHei', 10),
-            bg=self.card_color,
-            borderwidth=1,
-            relief='solid'
-        )
+                self.raw_report_tab, 
+                wrap=tk.WORD,
+                font=('PingFang SC', 10),
+                bg=self.card_color,
+                borderwidth=1,
+                relief='solid'
+            )
         self.report_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 在渲染报告标签页中添加占位标签
@@ -389,7 +394,7 @@ class ACPReportGenerator:
                     <meta charset="UTF-8">
                     <title>ACP 总结报告</title>
                     <style>
-                        body {{ font-family: SimHei, Arial, sans-serif; margin: 20px; line-height: 1.6; }}
+                        body {{ font-family: 'PingFang SC', 'San Francisco', sans-serif; margin: 20px; line-height: 1.6; }}
                         h1, h2, h3 {{ color: #333; }}
                         p {{ margin-bottom: 10px; }}
                         ul, ol {{ margin-bottom: 10px; margin-left: 20px; }}
@@ -424,24 +429,21 @@ class ACPReportGenerator:
         )
         browser_btn.pack(pady=15)
         
-        # 添加HTML内容预览
-        html_preview = scrolledtext.ScrolledText(
-            self.rendered_report_tab, 
-            wrap=tk.WORD, 
-            font=('SimHei', 10),
-            height=20,
-            bg=self.card_color,
-            borderwidth=1,
-            relief='solid'
-        )
-        html_preview.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        html_preview.insert(tk.END, self.html_content)
-        html_preview.config(state=tk.DISABLED)
+        # 添加HTML渲染组件
+        html_label = HTMLLabel(
+                self.rendered_report_tab, 
+                html=self.html_content,
+                bg=self.card_color,
+                borderwidth=1,
+                relief='solid'
+            )
+        html_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        html_label.fit_height()
         
         # 提示用户可以在浏览器中查看完整渲染效果
         tip_label = ttk.Label(
             self.rendered_report_tab, 
-            text="提示: 点击按钮在浏览器中查看完整渲染效果",
+            text="提示: 您正在查看本地渲染的报告，点击按钮可在浏览器中查看完整效果",
             foreground=self.primary_color,
             background=self.card_color
         )
@@ -568,7 +570,7 @@ class ACPReportGenerator:
         self.text_light = theme_colors['text_light']
         self.border_color = theme_colors['border_color']
         
-        # 配置样式 - 使用更柔和的字体
+        # 配置样式 - 设置中文字体为苹方
         self.style.configure("TLabel", font=('PingFang SC', 12), foreground=self.text_color, background=self.background_color)
         self.style.configure("Header.TLabel", font=('PingFang SC', 14, 'bold'), foreground=self.text_color, background=self.background_color)
         self.style.configure("TButton", font=('PingFang SC', 12), padding=6)

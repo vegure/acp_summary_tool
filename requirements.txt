@@ -16,3 +16,4 @@ os
 pyinstaller
 svglib
 reportlab
+tkhtmlview
