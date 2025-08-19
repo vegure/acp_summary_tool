@@ -5,6 +5,7 @@ import os
 import logging
 import re
 import base64
+import concurrent.futures
 from multiprocessing import Pool, cpu_count
 
 from PIL import Image
@@ -15,6 +16,7 @@ import tqdm
 from image_processor import ImageProcessor
 # 导入LLM客户端相关类
 from llm_client import LLMClientRegistry, load_config
+import threading
 
 # 设置日志记录
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -75,25 +77,56 @@ def main(service=None, images=None):
 
     if not os.path.exists(images_desc_file):
         idx = 1
-        for image in tqdm.tqdm(sorted_images):
-            message = [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{encode_image(image)}",
-                            },
+    # 定义一个函数用于处理单张图片并返回结果
+    def process_image(image, idx, llm_client):
+        """
+        处理单张图片并返回结果
+        
+        :param image: 图片文件路径
+        :param idx: 图片索引
+        :param llm_client: LLM客户端实例
+        :return: (索引, 处理结果)元组
+        """
+        message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{encode_image(image)}",
                         },
-                        {"type": "text", "text": "你是一个专业学者，从当前输入的图片中找到slide内容，并且提取其中的信息。"},
-                    ],
-                }
-            ]
-            response = llm_client.get_response(messages=message, task='vlm')
-            with open(images_desc_file, 'a') as f:
-                f.write(f'第{idx}张图片\n' + response.split('wyaf')[-1] + '\n')
-            idx += 1
+                    },
+                    {"type": "text", "text": "你是一个专业学者，从当前输入的图片中找到slide内容，并且提取其中的信息。"},
+                ],
+            }
+        ]
+        response = llm_client.get_response(messages=message, task='vlm')
+        return (idx, response.split('wyaf')[-1])
+
+    # 使用线程池处理图片，并保持结果顺序
+    max_threads = 8
+    results = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+        # 提交所有任务
+        future_to_idx = {
+            executor.submit(process_image, sorted_images[idx], idx + 1, llm_client): idx
+            for idx in range(len(sorted_images))
+        }
+
+        # 收集结果，确保按顺序处理
+        for future in tqdm.tqdm(concurrent.futures.as_completed(future_to_idx), desc="Processing images", total=len(sorted_images)):
+            idx, result = future.result()
+            results.append((idx, result))
+
+    # 按索引顺序排序结果
+    results.sort(key=lambda x: x[0])
+
+    # 按顺序写入文件
+    with open(images_desc_file, 'w') as f:
+        for idx, result in results:
+            f.write(f'第{idx}张图片\n{result}\n')
     # 读取images_desc文件内容，并进行总结
     with open(images_desc_file, 'r', encoding='utf-8') as f:
         images_desc = f.read()
@@ -105,10 +138,10 @@ def main(service=None, images=None):
     segments = [segment.strip() for segment in segments if segment.strip()]
     logging.info(f"去除空段落后的段落数量: {len(segments)}")
     # 对分割后的段落进行合并，每个段落不超过max_length个字符
-    max_length = 50 * 1024  # 50k字符
+    max_length = 10 * 1024  # 50k字符
     merged_segments = []
     current_segment = ""
-    for segment in segments:
+    for segment in tqdm.tqdm(segments, desc="合并段落"):
         if len(current_segment) + len(segment) + 1 <= max_length:
             if current_segment:
                 current_segment += "\n"  # 添加换行符
@@ -117,6 +150,7 @@ def main(service=None, images=None):
             merged_segments.append(current_segment)
             current_segment = segment
     merged_segments.append(current_segment)
+    logging.info(f"分段数：{len(merged_segments)}")
     # 对提取的slides信息进行总结
     segments_desc = []
     for idx, segment in tqdm.tqdm(enumerate(merged_segments), desc="处理分段总结"):
