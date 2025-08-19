@@ -517,7 +517,8 @@ class ACPReportGenerator:
             # API类型到客户端类型的映射
             api_type_map = {
                 "火山引擎": "ark",
-                "DeepSeek": "silicon_flow"
+                "DeepSeek": "silicon_flow",
+                "本地大模型": "local_llm"
             }
             
             # 检查API类型是否支持
@@ -527,8 +528,23 @@ class ACPReportGenerator:
             # 获取客户端类型
             client_type = api_type_map[api_type]
             
+            # 构建配置参数
+            config = None
+            if client_type == "local_llm":
+                # 对于本地大模型，需要从配置中获取地址、端口和模型名
+                local_llm_config = self.config.get("local_llm", {})
+                address = local_llm_config.get("address", "localhost")
+                port = local_llm_config.get("port", "8000")
+                model_name = local_llm_config.get("model_name", "gpt-4o")
+                
+                config = {
+                    "address": address,
+                    "port": port,
+                    "model_name": model_name
+                }
+            
             # 使用工厂类获取客户端实例
-            client = LLMClientRegistry.get_client(client_type, api_key)
+            client = LLMClientRegistry.get_client(client_type, api_key, config)
             
             # 使用客户端自带的测试方法
             success, message = client.test_connection()
@@ -643,8 +659,10 @@ class ConfigDialog(tk.Toplevel):
         self.parent = parent
         self.app = app
         self.title("API配置")
-        self.geometry("400x400")  # 增加高度以容纳主题设置
-        self.resizable(False, False)
+        
+        # 设置适当的初始大小，但允许调整
+        self.geometry("500x550")
+        self.resizable(True, True)
         
         # 使对话框模态
         self.grab_set()
@@ -652,68 +670,86 @@ class ConfigDialog(tk.Toplevel):
         # 设置背景色
         self.configure(bg=self.app.background_color)
         
-        # 创建主框架
-        main_frame = ttk.Frame(self, padding="20", style="TFrame")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # 创建主框架，使用pack布局让它填满整个窗口
+        main_frame = ttk.Frame(self, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # 设置列权重，使第二列能够扩展
+        main_frame.columnconfigure(1, weight=1)
         
         # API类型选择
-        ttk.Label(main_frame, text="API类型:", font=('PingFang SC', 12)).grid(row=0, column=0, sticky=tk.W, pady=(0, 12))
+        row = 0
+        ttk.Label(main_frame, text="API类型:", font=('PingFang SC', 12)).grid(row=row, column=0, sticky=tk.W, pady=(0, 12))
         self.api_type = tk.StringVar(value="火山引擎")
-        api_type_frame = ttk.Frame(main_frame, style="TFrame")
-        api_type_frame.grid(row=0, column=1, sticky=tk.W, pady=(0, 12))
+        api_type_frame = ttk.Frame(main_frame)
+        api_type_frame.grid(row=row, column=1, sticky=tk.W, pady=(0, 12))
         
         ttk.Radiobutton(
             api_type_frame, 
             text="火山引擎", 
             variable=self.api_type, 
-            value="火山引擎",
-            style="TRadiobutton"
+            value="火山引擎"
         ).pack(side=tk.LEFT, padx=(0, 15))
         
         ttk.Radiobutton(
             api_type_frame, 
             text="DeepSeek", 
             variable=self.api_type, 
-            value="DeepSeek",
-            style="TRadiobutton"
+            value="DeepSeek"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            api_type_frame, 
+            text="本地大模型", 
+            variable=self.api_type, 
+            value="本地大模型"
         ).pack(side=tk.LEFT)
+        
+        # 绑定API类型变更事件
+        self.api_type.trace_add("write", self.on_api_type_changed)
+        
+        # 本地大模型配置区域
+        row += 1
+        self.local_llm_frame = ttk.LabelFrame(main_frame, text="本地大模型配置")
+        self.local_llm_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
+        
+        # 为本地大模型配置区域设置列权重
+        self.local_llm_frame.columnconfigure(1, weight=1)
+        
+        # 地址
+        ttk.Label(self.local_llm_frame, text="地址:", font=('PingFang SC', 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_address = ttk.Entry(self.local_llm_frame, width=30)
+        self.local_llm_address.grid(row=0, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        
+        # 端口
+        ttk.Label(self.local_llm_frame, text="端口:", font=('PingFang SC', 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_port = ttk.Entry(self.local_llm_frame, width=10)
+        self.local_llm_port.grid(row=1, column=1, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+        
+        # 模型名
+        ttk.Label(self.local_llm_frame, text="模型名:", font=('PingFang SC', 10)).grid(row=2, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_model = ttk.Entry(self.local_llm_frame, width=30)
+        self.local_llm_model.grid(row=2, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
         
         # API密钥输入
-        ttk.Label(main_frame, text="API密钥:", font=('PingFang SC', 12)).grid(row=1, column=0, sticky=tk.W, pady=(0, 12))
+        row += 1
+        ttk.Label(main_frame, text="API密钥:", font=('PingFang SC', 12)).grid(row=row, column=0, sticky=tk.W, pady=(0, 12))
         self.api_key_entry = ttk.Entry(main_frame, width=30, show="*")
-        self.api_key_entry.grid(row=1, column=1, sticky=tk.W, pady=(0, 12))
+        self.api_key_entry.grid(row=row, column=1, sticky=tk.W+tk.E, pady=(0, 12))
+        self.api_key_label = ttk.Label(main_frame, text="(本地大模型可选)", font=('PingFang SC', 9))
+        self.api_key_label.grid(row=row, column=2, sticky=tk.W, pady=(0, 12))
         
-        # 主题设置
-        ttk.Label(main_frame, text="主题模式:", font=('PingFang SC', 12)).grid(row=2, column=0, sticky=tk.W, pady=(15, 12))
-        self.theme_mode = tk.StringVar(value=self.app.theme_mode)
-        theme_frame = ttk.Frame(main_frame, style="TFrame")
-        theme_frame.grid(row=2, column=1, sticky=tk.W, pady=(15, 12))
-        
-        ttk.Radiobutton(
-            theme_frame, 
-            text="自动", 
-            variable=self.theme_mode, 
-            value="auto",
-            style="TRadiobutton"
-        ).pack(side=tk.LEFT, padx=(0, 15))
-        
-        ttk.Radiobutton(
-            theme_frame, 
-            text="白天", 
-            variable=self.theme_mode, 
-            value="light",
-            style="TRadiobutton"
-        ).pack(side=tk.LEFT, padx=(0, 15))
-        
-        ttk.Radiobutton(
-            theme_frame, 
-            text="黑夜", 
-            variable=self.theme_mode, 
-            value="dark",
-            style="TRadiobutton"
-        ).pack(side=tk.LEFT)
+        # 校验按钮
+        row += 1
+        self.test_btn = ttk.Button(
+            main_frame, 
+            text="校验连接", 
+            command=self.test_connection
+        )
+        self.test_btn.grid(row=row, column=0, columnspan=2, pady=(0, 12))
         
         # 状态标签
+        row += 1
         self.status_var = tk.StringVar()
         self.status_var.set("请输入API密钥并校验连接")
         self.status_label = ttk.Label(
@@ -722,27 +758,51 @@ class ConfigDialog(tk.Toplevel):
             anchor=tk.W,
             padding=5
         )
-        self.status_label.grid(row=4, column=0, columnspan=2, pady=(0, 12))
+        self.status_label.grid(row=row, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(0, 12))
         
-        # 校验按钮
-        self.test_btn = ttk.Button(
-            main_frame, 
-            text="校验连接", 
-            command=self.test_connection,
-            style="Primary.TButton"
-        )
-        self.test_btn.grid(row=3, column=0, columnspan=2, pady=(0, 12))
+        # 主题设置
+        row += 1
+        ttk.Label(main_frame, text="主题模式:", font=('PingFang SC', 12)).grid(row=row, column=0, sticky=tk.W, pady=(15, 12))
+        self.theme_mode = tk.StringVar(value=self.app.theme_mode)
+        theme_frame = ttk.Frame(main_frame)
+        theme_frame.grid(row=row, column=1, sticky=tk.W, pady=(15, 12))
         
-        # 按钮框架
-        btn_frame = ttk.Frame(main_frame, style="TFrame")
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=(15, 0))
+        ttk.Radiobutton(
+            theme_frame, 
+            text="自动", 
+            variable=self.theme_mode, 
+            value="auto"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            theme_frame, 
+            text="白天", 
+            variable=self.theme_mode, 
+            value="light"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            theme_frame, 
+            text="黑夜", 
+            variable=self.theme_mode, 
+            value="dark"
+        ).pack(side=tk.LEFT)
+        
+        # 添加一个间隔行，确保按钮在底部
+        row += 1
+        ttk.Frame(main_frame, height=20).grid(row=row, column=0)
+        
+        # 确保按钮在底部显示
+        row += 1
+        # 创建一个框架来放置底部按钮
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.grid(row=row, column=0, columnspan=2, pady=(10, 0), sticky=tk.E)
         
         # 保存按钮
         self.save_btn = ttk.Button(
             btn_frame, 
             text="保存配置", 
-            command=self.save_dialog_config,
-            style="Success.TButton"
+            command=self.save_dialog_config
         )
         self.save_btn.pack(side=tk.LEFT, padx=(0, 15))
         
@@ -750,13 +810,34 @@ class ConfigDialog(tk.Toplevel):
         self.cancel_btn = ttk.Button(
             btn_frame, 
             text="取消", 
-            command=self.destroy,
-            style="TButton"
+            command=self.destroy
         )
         self.cancel_btn.pack(side=tk.LEFT)
         
         # 加载现有配置
         self.load_existing_config()
+        
+        # 初始显示状态
+        self.on_api_type_changed()
+        
+        # 添加窗口大小变化事件，动态调整布局
+        self.bind('<Configure>', self.on_resize)
+        
+    def on_resize(self, event):
+        """窗口大小变化时的回调，确保元素不会重叠"""
+        # 这里可以实现更复杂的碰撞检测逻辑
+        # 简单的实现是确保所有元素都在正确的行上
+        self.update_idletasks()
+    
+    def on_api_type_changed(self, *args):
+        """当API类型变更时，显示或隐藏本地大模型配置区域"""
+        api_type = self.api_type.get()
+        if api_type == "本地大模型":
+            self.local_llm_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
+            self.api_key_label.config(text="(可选)")
+        else:
+            self.local_llm_frame.grid_remove()
+            self.api_key_label.config(text="")
     
     def test_connection(self):
         """测试API连接"""
@@ -783,6 +864,12 @@ class ConfigDialog(tk.Toplevel):
         api_key = self.app.config.get("api_keys", {}).get(api_type, "")
         self.api_key_entry.insert(0, api_key)
         
+        # 加载本地大模型配置
+        local_llm_config = self.app.config.get("local_llm", {})
+        self.local_llm_address.insert(0, local_llm_config.get("address", "localhost"))
+        self.local_llm_port.insert(0, local_llm_config.get("port", "8000"))
+        self.local_llm_model.insert(0, local_llm_config.get("model_name", "gpt-4o"))
+        
         # 加载主题模式
         theme_mode = self.app.config.get("theme_mode", "auto")
         self.theme_mode.set(theme_mode)
@@ -793,7 +880,8 @@ class ConfigDialog(tk.Toplevel):
         api_key = self.api_key_entry.get()
         theme_mode = self.theme_mode.get()
         
-        if not api_key:
+        # 对于非本地大模型，API密钥是必需的
+        if api_type != "本地大模型" and not api_key:
             messagebox.showerror("错误", "请输入API密钥")
             return
         
@@ -804,6 +892,15 @@ class ConfigDialog(tk.Toplevel):
         api_keys = config.get("api_keys", {})
         api_keys[api_type] = api_key
         config["api_keys"] = api_keys
+        
+        # 保存本地大模型配置（如果选择了本地大模型）
+        if api_type == "本地大模型":
+            local_llm_config = {
+                "address": self.local_llm_address.get().strip() or "localhost",
+                "port": self.local_llm_port.get().strip() or "8000",
+                "model_name": self.local_llm_model.get().strip() or "gpt-4o"
+            }
+            config["local_llm"] = local_llm_config
         
         # 保存主题设置
         config["theme_mode"] = theme_mode

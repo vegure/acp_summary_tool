@@ -32,10 +32,28 @@ def main(service=None, images=None):
     if service is None:
         config = load_config()
         api_type = config.get('api_type', '火山引擎')
-        service = 'silicon_flow' if api_type == 'DeepSeek' else 'ark'
+        if api_type == 'DeepSeek':
+            service = 'silicon_flow'
+        elif api_type == '本地大模型':
+            service = 'local_llm'
+        else:
+            service = 'ark'
     
     # 通过注册中心获取客户端实例
-    llm_client = LLMClientRegistry.get_client(service)
+    if service == 'local_llm':
+        # 对于本地大模型，需要从配置中获取地址、端口和模型名
+        config = load_config()
+        local_llm_config = config.get('local_llm', {})
+        client_config = {
+            'address': local_llm_config.get('address', 'localhost'),
+            'port': local_llm_config.get('port', '8000'),
+            'model_name': local_llm_config.get('model_name', 'gpt-4o')
+        }
+        # 获取API密钥
+        api_key = config.get('api_keys', {}).get('本地大模型', '')
+        llm_client = LLMClientRegistry.get_client(service, api_key, client_config)
+    else:
+        llm_client = LLMClientRegistry.get_client(service)
     # 创建图像处理器实例
     image_processor = ImageProcessor()
 

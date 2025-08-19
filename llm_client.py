@@ -32,10 +32,28 @@ class LLMClientRegistry:
         cls._clients[client_type] = client_class
 
     @classmethod
-    def get_client(cls, client_type: str, api_key=None):
-        """根据类型获取客户端实例"""
+    def get_client(cls, client_type: str, api_key=None, config=None):
+        """根据类型获取客户端实例
+        
+        Args:
+            client_type: 客户端类型
+            api_key: API密钥
+            config: 额外配置参数，特别是针对本地大模型的配置
+        
+        Returns:
+            LLMClient实例
+        """
         if client_type not in cls._clients:
             raise ValueError(f"不支持的客户端类型: {client_type}")
+            
+        # 对于本地大模型客户端，需要传递额外的配置参数
+        if client_type == 'local_llm' and config:
+            address = config.get('address')
+            port = config.get('port')
+            model_name = config.get('model_name')
+            return cls._clients[client_type](api_key, address, port, model_name)
+        
+        # 对于其他客户端，只传递api_key
         return cls._clients[client_type](api_key)
 
     @classmethod
@@ -128,6 +146,48 @@ class SiliconFlowClient(LLMClient):
             return False, f"连接失败: {str(e)}"
 
 
+class LocalLLMClient(LLMClient):
+    """本地大模型客户端，继承自LLMClient，用于处理本地部署的大模型服务"""
+    def __init__(self, api_key=None, address=None, port=None, model_name=None) -> None:
+        # 如果没有提供参数，则从配置文件中加载
+        config = load_config()
+        if api_key is None:
+            api_key = config.get('api_keys', {}).get('本地大模型', '')
+        
+        # 从配置中获取本地大模型的设置
+        local_llm_config = config.get('local_llm', {})
+        if address is None:
+            address = local_llm_config.get('address', 'localhost')
+        if port is None:
+            port = local_llm_config.get('port', '8000')
+        if model_name is None:
+            model_name = local_llm_config.get('model_name', 'gpt-4o')
+        
+        # 构建base_url
+        base_url = f'http://{address}:{port}/v1'
+        
+        # 定义模型配置
+        models = {
+            'llm': model_name,
+            'vlm': model_name,
+        }
+        
+        super().__init__(models, base_url, api_key)
+
+    def test_connection(self) -> tuple[bool, str]:
+        """测试本地大模型API连接"""
+        try:
+            # 发送测试请求
+            response = self.get_response(
+                messages=[{"role": "user", "content": "测试连接"}],
+                task='llm'
+            )
+            return True, "连接成功"
+        except Exception as e:
+            return False, f"连接失败: {str(e)}"
+
+
 # 注册客户端
 LLMClientRegistry.register_client('ark', ArkClient)
 LLMClientRegistry.register_client('silicon_flow', SiliconFlowClient)
+LLMClientRegistry.register_client('local_llm', LocalLLMClient)
