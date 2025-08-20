@@ -517,7 +517,7 @@ class ACPReportGenerator:
             # API类型到客户端类型的映射
             api_type_map = {
                 "火山引擎": "ark",
-                "DeepSeek": "silicon_flow",
+                "硅基流动": "silicon_flow",
                 "本地大模型": "local_llm"
             }
             
@@ -693,9 +693,9 @@ class ConfigDialog(tk.Toplevel):
         
         ttk.Radiobutton(
             api_type_frame, 
-            text="DeepSeek", 
+            text="硅基流动", 
             variable=self.api_type, 
-            value="DeepSeek"
+            value="硅基流动"
         ).pack(side=tk.LEFT, padx=(0, 15))
         
         ttk.Radiobutton(
@@ -707,6 +707,102 @@ class ConfigDialog(tk.Toplevel):
         
         # 绑定API类型变更事件
         self.api_type.trace_add("write", self.on_api_type_changed)
+        
+        # 火山引擎模型配置区域
+        row += 1
+        self.volcano_engine_frame = ttk.LabelFrame(main_frame, text="火山引擎模型配置")
+        self.volcano_engine_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
+        
+        # 火山引擎列权重设置
+        self.volcano_engine_frame.columnconfigure(1, weight=1)
+        
+        # 火山引擎模型类型选择
+        ttk.Label(self.volcano_engine_frame, text="模型类型:", font=('PingFang SC', 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.volcano_engine_model_type = tk.StringVar(value="LLM")
+        volcano_model_type_frame = ttk.Frame(self.volcano_engine_frame)
+        volcano_model_type_frame.grid(row=0, column=1, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+        
+        ttk.Radiobutton(
+            volcano_model_type_frame, 
+            text="文本模型 (LLM)", 
+            variable=self.volcano_engine_model_type, 
+            value="LLM"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            volcano_model_type_frame, 
+            text="多模态模型 (VLM)", 
+            variable=self.volcano_engine_model_type, 
+            value="VLM"
+        ).pack(side=tk.LEFT)
+        
+        # 火山引擎模型选择
+        ttk.Label(self.volcano_engine_frame, text="选择模型:", font=('PingFang SC', 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.volcano_engine_model = tk.StringVar()
+        
+        # 火山引擎模型下拉菜单
+        self.volcano_engine_model_menu = ttk.Combobox(self.volcano_engine_frame, textvariable=self.volcano_engine_model, width=25)
+        
+        # 内置火山引擎模型列表
+        self.volcano_engine_llm_models = ["doubao-seed-1-6-thinking-250715", "deepseek-r1-250528", "kimi-k2-250711"]
+        self.volcano_engine_vlm_models = ["doubao-1-5-thinking-vision-pro-250428", "doubao-1-5-ui-tars-250428"]
+        
+        # 默认显示LLM模型
+        self.volcano_engine_model_menu['values'] = self.volcano_engine_llm_models
+        
+        # 将下拉菜单添加到界面
+        self.volcano_engine_model_menu.grid(row=1, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        
+        # 绑定火山引擎模型类型变更事件
+        self.volcano_engine_model_type.trace_add("write", self.on_volcano_engine_model_type_changed)
+        
+        # 硅基流程模型配置区域
+        row += 1
+        self.deepseek_frame = ttk.LabelFrame(main_frame, text="硅基流程模型配置")
+        self.deepseek_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
+        
+        # DeepSeek列权重设置
+        self.deepseek_frame.columnconfigure(1, weight=1)
+        
+        # DeepSeek模型类型选择
+        ttk.Label(self.deepseek_frame, text="模型类型:", font=('PingFang SC', 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.deepseek_model_type = tk.StringVar(value="LLM")
+        deepseek_model_type_frame = ttk.Frame(self.deepseek_frame)
+        deepseek_model_type_frame.grid(row=0, column=1, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+        
+        ttk.Radiobutton(
+            deepseek_model_type_frame, 
+            text="文本模型 (LLM)", 
+            variable=self.deepseek_model_type, 
+            value="LLM"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            deepseek_model_type_frame, 
+            text="多模态模型 (VLM)", 
+            variable=self.deepseek_model_type, 
+            value="VLM"
+        ).pack(side=tk.LEFT)
+        
+        # DeepSeek模型选择
+        ttk.Label(self.deepseek_frame, text="选择模型:", font=('PingFang SC', 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.deepseek_model = tk.StringVar()
+        
+        # DeepSeek模型下拉菜单
+        self.deepseek_model_menu = ttk.Combobox(self.deepseek_frame, textvariable=self.deepseek_model, width=25)
+        
+        # 内置DeepSeek模型列表
+        self.deepseek_llm_models = ["deepseek-chat", "deepseek-coder", "deepseek-r1"]
+        self.deepseek_vlm_models = ["deepseek-vl"]
+        
+        # 默认显示LLM模型
+        self.deepseek_model_menu['values'] = self.deepseek_llm_models
+        
+        # 将下拉菜单添加到界面
+        self.deepseek_model_menu.grid(row=1, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        
+        # 绑定DeepSeek模型类型变更事件
+        self.deepseek_model_type.trace_add("write", self.on_deepseek_model_type_changed)
         
         # 本地大模型配置区域
         row += 1
@@ -830,14 +926,69 @@ class ConfigDialog(tk.Toplevel):
         self.update_idletasks()
     
     def on_api_type_changed(self, *args):
-        """当API类型变更时，显示或隐藏本地大模型配置区域"""
+        """当API类型变更时，显示或隐藏相应的配置区域"""
         api_type = self.api_type.get()
-        if api_type == "本地大模型":
+        
+        # 首先隐藏所有特定API配置区域
+        self.volcano_engine_frame.grid_remove()
+        self.deepseek_frame.grid_remove()
+        self.local_llm_frame.grid_remove()
+        
+        # 然后根据选择的API类型显示相应的配置区域
+        if api_type == "火山引擎":
+            self.volcano_engine_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
+            self.api_key_label.config(text="")
+        elif api_type == "硅基流动":
+            self.deepseek_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
+            self.api_key_label.config(text="")
+        elif api_type == "本地大模型":
             self.local_llm_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
             self.api_key_label.config(text="(可选)")
+            
+        # 触发窗口重绘以适应布局变化
+        self.update_idletasks()
+        
+    def on_volcano_engine_model_type_changed(self, *args):
+        """当火山引擎模型类型变更时，更新模型下拉菜单"""
+        model_type = self.volcano_engine_model_type.get()
+        current_model = self.volcano_engine_model.get()
+        
+        # 根据选择的模型类型更新下拉菜单选项
+        if model_type == "LLM":
+            self.volcano_engine_model_menu['values'] = self.volcano_engine_llm_models
+            # 如果当前选择的模型在新列表中，保持选择，否则选择第一个
+            if current_model in self.volcano_engine_llm_models:
+                self.volcano_engine_model.set(current_model)
+            elif self.volcano_engine_llm_models:
+                self.volcano_engine_model.set(self.volcano_engine_llm_models[0])
         else:
-            self.local_llm_frame.grid_remove()
-            self.api_key_label.config(text="")
+            self.volcano_engine_model_menu['values'] = self.volcano_engine_vlm_models
+            # 如果当前选择的模型在新列表中，保持选择，否则选择第一个
+            if current_model in self.volcano_engine_vlm_models:
+                self.volcano_engine_model.set(current_model)
+            elif self.volcano_engine_vlm_models:
+                self.volcano_engine_model.set(self.volcano_engine_vlm_models[0])
+        
+    def on_deepseek_model_type_changed(self, *args):
+        """当DeepSeek模型类型变更时，更新模型下拉菜单"""
+        model_type = self.deepseek_model_type.get()
+        current_model = self.deepseek_model.get()
+        
+        # 根据选择的模型类型更新下拉菜单选项
+        if model_type == "LLM":
+            self.deepseek_model_menu['values'] = self.deepseek_llm_models
+            # 如果当前选择的模型在新列表中，保持选择，否则选择第一个
+            if current_model in self.deepseek_llm_models:
+                self.deepseek_model.set(current_model)
+            elif self.deepseek_llm_models:
+                self.deepseek_model.set(self.deepseek_llm_models[0])
+        else:
+            self.deepseek_model_menu['values'] = self.deepseek_vlm_models
+            # 如果当前选择的模型在新列表中，保持选择，否则选择第一个
+            if current_model in self.deepseek_vlm_models:
+                self.deepseek_model.set(current_model)
+            elif self.deepseek_vlm_models:
+                self.deepseek_model.set(self.deepseek_vlm_models[0])
     
     def test_connection(self):
         """测试API连接"""
@@ -863,6 +1014,32 @@ class ConfigDialog(tk.Toplevel):
         
         api_key = self.app.config.get("api_keys", {}).get(api_type, "")
         self.api_key_entry.insert(0, api_key)
+        
+        # 加载火山引擎配置
+        volcano_engine_config = self.app.config.get("volcano_engine", {})
+        self.volcano_engine_model_type.set(volcano_engine_config.get("model_type", "LLM"))
+        
+        # 触发模型类型变更事件以更新下拉菜单
+        self.on_volcano_engine_model_type_changed()
+        
+        # 设置模型选择
+        if volcano_engine_config.get("model"):
+            self.volcano_engine_model.set(volcano_engine_config.get("model"))
+        elif self.volcano_engine_llm_models:
+            self.volcano_engine_model.set(self.volcano_engine_llm_models[0])
+        
+        # 加载DeepSeek配置
+        deepseek_config = self.app.config.get("deepseek", {})
+        self.deepseek_model_type.set(deepseek_config.get("model_type", "LLM"))
+        
+        # 触发模型类型变更事件以更新下拉菜单
+        self.on_deepseek_model_type_changed()
+        
+        # 设置模型选择
+        if deepseek_config.get("model"):
+            self.deepseek_model.set(deepseek_config.get("model"))
+        elif self.deepseek_llm_models:
+            self.deepseek_model.set(self.deepseek_llm_models[0])
         
         # 加载本地大模型配置
         local_llm_config = self.app.config.get("local_llm", {})
@@ -893,14 +1070,27 @@ class ConfigDialog(tk.Toplevel):
         api_keys[api_type] = api_key
         config["api_keys"] = api_keys
         
-        # 保存本地大模型配置（如果选择了本地大模型）
-        if api_type == "本地大模型":
-            local_llm_config = {
-                "address": self.local_llm_address.get().strip() or "localhost",
-                "port": self.local_llm_port.get().strip() or "8000",
-                "model_name": self.local_llm_model.get().strip() or "gpt-4o"
-            }
-            config["local_llm"] = local_llm_config
+        # 保存火山引擎配置
+        volcano_engine_config = {
+            "model_type": self.volcano_engine_model_type.get(),
+            "model": self.volcano_engine_model.get()
+        }
+        config["volcano_engine"] = volcano_engine_config
+        
+        # 保存DeepSeek配置
+        deepseek_config = {
+            "model_type": self.deepseek_model_type.get(),
+            "model": self.deepseek_model.get()
+        }
+        config["deepseek"] = deepseek_config
+        
+        # 保存本地大模型配置
+        local_llm_config = {
+            "address": self.local_llm_address.get().strip() or "localhost",
+            "port": self.local_llm_port.get().strip() or "8000",
+            "model_name": self.local_llm_model.get().strip() or "gpt-4o"
+        }
+        config["local_llm"] = local_llm_config
         
         # 保存主题设置
         config["theme_mode"] = theme_mode
