@@ -533,14 +533,15 @@ class ACPReportGenerator:
             if client_type == "local_llm":
                 # 对于本地大模型，需要从配置中获取地址、端口和模型名
                 local_llm_config = self.config.get("local_llm", {})
-                address = local_llm_config.get("address", "localhost")
-                port = local_llm_config.get("port", "8000")
-                model_name = local_llm_config.get("model_name", "gpt-4o")
                 
+                # 构建完整配置，包含LLM和VLM参数
                 config = {
-                    "address": address,
-                    "port": port,
-                    "model_name": model_name
+                    "llm_address": local_llm_config.get("llm_address", "localhost"),
+                    "llm_port": local_llm_config.get("llm_port", "8000"),
+                    "llm_model_name": local_llm_config.get("llm_model_name", "gpt-4o"),
+                    "vlm_address": local_llm_config.get("vlm_address", "localhost"),
+                    "vlm_port": local_llm_config.get("vlm_port", "8000"),
+                    "vlm_model_name": local_llm_config.get("vlm_model_name", "gpt-4o")
                 }
             
             # 使用工厂类获取客户端实例
@@ -809,23 +810,69 @@ class ConfigDialog(tk.Toplevel):
         self.local_llm_frame = ttk.LabelFrame(main_frame, text="本地大模型配置")
         self.local_llm_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(10, 12))
         
+        # 本地大模型类型选择
+        ttk.Label(self.local_llm_frame, text="任务类型:", font=('PingFang SC', 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_task_type = tk.StringVar(value="LLM")
+        local_llm_task_frame = ttk.Frame(self.local_llm_frame)
+        local_llm_task_frame.grid(row=0, column=1, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+        
+        ttk.Radiobutton(
+            local_llm_task_frame, 
+            text="文本模型 (LLM)", 
+            variable=self.local_llm_task_type, 
+            value="LLM"
+        ).pack(side=tk.LEFT, padx=(0, 15))
+        
+        ttk.Radiobutton(
+            local_llm_task_frame, 
+            text="多模态模型 (VLM)", 
+            variable=self.local_llm_task_type, 
+            value="VLM"
+        ).pack(side=tk.LEFT)
+        
         # 为本地大模型配置区域设置列权重
         self.local_llm_frame.columnconfigure(1, weight=1)
         
-        # 地址
-        ttk.Label(self.local_llm_frame, text="地址:", font=('PingFang SC', 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
-        self.local_llm_address = ttk.Entry(self.local_llm_frame, width=30)
-        self.local_llm_address.grid(row=0, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        # 绑定本地大模型任务类型变更事件
+        self.local_llm_task_type.trace_add("write", self.on_local_llm_task_type_changed)
         
-        # 端口
-        ttk.Label(self.local_llm_frame, text="端口:", font=('PingFang SC', 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
-        self.local_llm_port = ttk.Entry(self.local_llm_frame, width=10)
-        self.local_llm_port.grid(row=1, column=1, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+        # LLM 配置区域
+        self.local_llm_llm_frame = ttk.Frame(self.local_llm_frame)
+        self.local_llm_llm_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(5, 5))
         
-        # 模型名
-        ttk.Label(self.local_llm_frame, text="模型名:", font=('PingFang SC', 10)).grid(row=2, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
-        self.local_llm_model = ttk.Entry(self.local_llm_frame, width=30)
-        self.local_llm_model.grid(row=2, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        # LLM 地址
+        ttk.Label(self.local_llm_llm_frame, text="LLM地址:", font=('PingFang SC', 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_llm_address = ttk.Entry(self.local_llm_llm_frame, width=30)
+        self.local_llm_llm_address.grid(row=0, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        
+        # LLM 端口
+        ttk.Label(self.local_llm_llm_frame, text="LLM端口:", font=('PingFang SC', 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_llm_port = ttk.Entry(self.local_llm_llm_frame, width=10)
+        self.local_llm_llm_port.grid(row=1, column=1, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+        
+        # LLM 模型名
+        ttk.Label(self.local_llm_llm_frame, text="LLM模型名:", font=('PingFang SC', 10)).grid(row=2, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_llm_model = ttk.Entry(self.local_llm_llm_frame, width=30)
+        self.local_llm_llm_model.grid(row=2, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        
+        # VLM 配置区域
+        self.local_llm_vlm_frame = ttk.Frame(self.local_llm_frame)
+        self.local_llm_vlm_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(5, 5))
+        
+        # VLM 地址
+        ttk.Label(self.local_llm_vlm_frame, text="VLM地址:", font=('PingFang SC', 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_vlm_address = ttk.Entry(self.local_llm_vlm_frame, width=30)
+        self.local_llm_vlm_address.grid(row=0, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
+        
+        # VLM 端口
+        ttk.Label(self.local_llm_vlm_frame, text="VLM端口:", font=('PingFang SC', 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_vlm_port = ttk.Entry(self.local_llm_vlm_frame, width=10)
+        self.local_llm_vlm_port.grid(row=1, column=1, sticky=tk.W, pady=(0, 8), padx=(0, 10))
+        
+        # VLM 模型名
+        ttk.Label(self.local_llm_vlm_frame, text="VLM模型名:", font=('PingFang SC', 10)).grid(row=2, column=0, sticky=tk.W, pady=(0, 8), padx=(10, 0))
+        self.local_llm_vlm_model = ttk.Entry(self.local_llm_vlm_frame, width=30)
+        self.local_llm_vlm_model.grid(row=2, column=1, sticky=tk.W+tk.E, pady=(0, 8), padx=(0, 10))
         
         # API密钥输入
         row += 1
@@ -915,6 +962,7 @@ class ConfigDialog(tk.Toplevel):
         
         # 初始显示状态
         self.on_api_type_changed()
+        self.on_local_llm_task_type_changed()
         
         # 添加窗口大小变化事件，动态调整布局
         self.bind('<Configure>', self.on_resize)
@@ -989,6 +1037,18 @@ class ConfigDialog(tk.Toplevel):
                 self.deepseek_model.set(current_model)
             elif self.deepseek_vlm_models:
                 self.deepseek_model.set(self.deepseek_vlm_models[0])
+                
+    def on_local_llm_task_type_changed(self, *args):
+        """当本地大模型任务类型变更时，显示或隐藏相应的配置区域"""
+        task_type = self.local_llm_task_type.get()
+        
+        # 根据选择的任务类型显示或隐藏配置区域
+        if task_type == "LLM":
+            self.local_llm_llm_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(5, 5))
+            self.local_llm_vlm_frame.grid_remove()
+        else:
+            self.local_llm_llm_frame.grid_remove()
+            self.local_llm_vlm_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, pady=(5, 5))
     
     def test_connection(self):
         """测试API连接"""
@@ -1043,9 +1103,16 @@ class ConfigDialog(tk.Toplevel):
         
         # 加载本地大模型配置
         local_llm_config = self.app.config.get("local_llm", {})
-        self.local_llm_address.insert(0, local_llm_config.get("address", "localhost"))
-        self.local_llm_port.insert(0, local_llm_config.get("port", "8000"))
-        self.local_llm_model.insert(0, local_llm_config.get("model_name", "gpt-4o"))
+        
+        # 加载LLM配置
+        self.local_llm_llm_address.insert(0, local_llm_config.get("llm_address", "localhost"))
+        self.local_llm_llm_port.insert(0, local_llm_config.get("llm_port", "8000"))
+        self.local_llm_llm_model.insert(0, local_llm_config.get("llm_model_name", "gpt-4o"))
+        
+        # 加载VLM配置
+        self.local_llm_vlm_address.insert(0, local_llm_config.get("vlm_address", "localhost"))
+        self.local_llm_vlm_port.insert(0, local_llm_config.get("vlm_port", "8000"))
+        self.local_llm_vlm_model.insert(0, local_llm_config.get("vlm_model_name", "gpt-4o"))
         
         # 加载主题模式
         theme_mode = self.app.config.get("theme_mode", "auto")
@@ -1086,9 +1153,12 @@ class ConfigDialog(tk.Toplevel):
         
         # 保存本地大模型配置
         local_llm_config = {
-            "address": self.local_llm_address.get().strip() or "localhost",
-            "port": self.local_llm_port.get().strip() or "8000",
-            "model_name": self.local_llm_model.get().strip() or "gpt-4o"
+            "llm_address": self.local_llm_llm_address.get().strip() or "localhost",
+            "llm_port": self.local_llm_llm_port.get().strip() or "8000",
+            "llm_model_name": self.local_llm_llm_model.get().strip() or "gpt-4o",
+            "vlm_address": self.local_llm_vlm_address.get().strip() or "localhost",
+            "vlm_port": self.local_llm_vlm_port.get().strip() or "8000",
+            "vlm_model_name": self.local_llm_vlm_model.get().strip() or "gpt-4o"
         }
         config["local_llm"] = local_llm_config
         

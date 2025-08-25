@@ -48,10 +48,7 @@ class LLMClientRegistry:
             
         # 对于本地大模型客户端，需要传递额外的配置参数
         if client_type == 'local_llm' and config:
-            address = config.get('address')
-            port = config.get('port')
-            model_name = config.get('model_name')
-            return cls._clients[client_type](api_key, address, port, model_name)
+            return cls._clients[client_type](api_key, config)
         
         # 对于其他客户端，只传递api_key
         return cls._clients[client_type](api_key)
@@ -148,31 +145,64 @@ class SiliconFlowClient(LLMClient):
 
 class LocalLLMClient(LLMClient):
     """本地大模型客户端，继承自LLMClient，用于处理本地部署的大模型服务"""
-    def __init__(self, api_key=None, address=None, port=None, model_name=None) -> None:
+    def __init__(self, api_key=None, config=None) -> None:
         # 如果没有提供参数，则从配置文件中加载
-        config = load_config()
+        default_config = load_config()
         if api_key is None:
-            api_key = config.get('api_keys', {}).get('本地大模型', '')
+            api_key = default_config.get('api_keys', {}).get('本地大模型', '')
         
-        # 从配置中获取本地大模型的设置
-        local_llm_config = config.get('local_llm', {})
-        if address is None:
-            address = local_llm_config.get('address', 'localhost')
-        if port is None:
-            port = local_llm_config.get('port', '8000')
-        if model_name is None:
-            model_name = local_llm_config.get('model_name', 'gpt-4o')
+        # 合并默认配置和传入的配置
+        local_llm_config = {**default_config.get('local_llm', {}), **(config or {})}
         
-        # 构建base_url
-        base_url = f'http://{address}:{port}/v1'
+        # 为LLM和VLM任务分别获取配置
+        llm_address = local_llm_config.get('llm_address', local_llm_config.get('address', 'localhost'))
+        llm_port = local_llm_config.get('llm_port', local_llm_config.get('port', '8000'))
+        llm_model_name = local_llm_config.get('llm_model_name', local_llm_config.get('model_name', 'gpt-4o'))
+        
+        vlm_address = local_llm_config.get('vlm_address', llm_address)
+        vlm_port = local_llm_config.get('vlm_port', llm_port)
+        vlm_model_name = local_llm_config.get('vlm_model_name', llm_model_name)
+        
+        # 构建base_url，对于不同任务可能有不同的地址和端口
+        llm_base_url = f'http://{llm_address}:{llm_port}/v1'
+        vlm_base_url = f'http://{vlm_address}:{vlm_port}/v1'
         
         # 定义模型配置
         models = {
-            'llm': model_name,
-            'vlm': model_name,
+            'llm': llm_model_name,
+            'vlm': vlm_model_name,
         }
         
-        super().__init__(models, base_url, api_key)
+        # 存储基础URL，用于后续可能的扩展
+        self.base_urls = {
+            'llm': llm_base_url,
+            'vlm': vlm_base_url,
+        }
+        
+        # 对于基类，我们使用LLM的基础URL
+        super().__init__(models, llm_base_url, api_key)
+
+    def get_response(self, messages: list[dict[str, str]], task='llm', max_retry=3) -> str:
+        """发送消息给LLM并获取响应"""
+        # 根据任务类型选择不同的基础URL
+        base_url = self.base_urls.get(task, self.url)
+        
+        # 创建对应的客户端
+        client = OpenAI(api_key=self.client.api_key, base_url=base_url)
+        
+        for _ in range(max_retry):
+            try:
+                response = client.chat.completions.create(
+                    model=self.models[task],
+                    messages=messages,
+                    stream=False,
+                    timeout=1000,  # 设置超时时间为1000秒
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                logging.error(f"Failed to get response from {task} model: {str(e)}")
+                continue
+        raise RuntimeError(f"Failed to get response from {task} model.")
 
     def test_connection(self) -> tuple[bool, str]:
         """测试本地大模型API连接"""
